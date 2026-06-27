@@ -1,0 +1,4 @@
+gatekeeper.exe
+*.exe
+.DS_Store
+node_modules/

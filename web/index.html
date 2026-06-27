@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>gatekeeper</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="term">
+
+  <!-- ── Top title bar ─────────────────────────────── -->
+  <div class="t-bar">
+    <div class="t-dots">
+      <span class="t-dot r"></span>
+      <span class="t-dot y"></span>
+      <span class="t-dot g"></span>
+    </div>
+    <span class="t-title" id="tTitle">gatekeeper</span>
+    <span class="t-role" id="tRole">…</span>
+  </div>
+
+  <!-- ── Terminal output body ──────────────────────── -->
+  <div class="t-body" id="tBody">
+    <div id="outputLog"></div>
+
+    <!-- Live input row -->
+    <div class="input-row" id="inputRow">
+      <span class="ps1" id="ps1Wrap">
+        <span class="u"    id="ps1User">user</span><span class="at">@</span><span class="h">gatekeeper</span><span class="sep">:</span><span class="path" id="ps1Path">~</span><span class="dol"> $</span>
+      </span>
+      <span class="inp-txt" id="inputDisplay"></span><span class="cursor" id="cursor"></span>
+    </div>
+  </div>
+
+  <!-- ── Host inline approval bar ────────────────────── -->
+  <!-- Must be BEFORE t-foot so it's not clipped by overflow:hidden -->
+  <div class="apv-bar hidden" id="apvBar">
+    <span class="apv-icon">⚠</span>
+    <span class="apv-label">guest wants to run</span>
+    <span class="apv-sep">›</span>
+    <code class="apv-cmd" id="apvCmd">—</code>
+    <span class="apv-keys">[ <span class="k-y">y</span> ] approve &nbsp;&nbsp; [ <span class="k-n">n</span> ] deny</span>
+  </div>
+
+  <!-- ── Guest waiting bar ──────────────────────────── -->
+  <div class="wait-bar" id="waitBar">
+    <span>⏳</span>
+    <span id="waitMsg">Waiting for host approval…</span>
+  </div>
+
+  <!-- ── Error banner ──────────────────────────────── -->
+  <div class="err-banner hidden" id="errBanner">
+    <span id="errMsg">Connection failed.</span>
+  </div>
+
+  <!-- ── Bottom status bar ─────────────────────────── -->
+  <div class="t-foot">
+    <span id="footLeft">gatekeeper v2.0</span>
+    <span class="f-status" id="footMid"></span>
+    <span class="f-right"  id="footRight">share · help</span>
+  </div>
+
+</div>
+
+<!-- Hidden real input (captures keystrokes) -->
+<input type="text" id="hiddenInput" class="ghost-input"
+       autocomplete="off" spellcheck="false" aria-label="Terminal input">
+
+<script src="shell.js"></script>
+</body>
+</html>
