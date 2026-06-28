@@ -59,54 +59,75 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Fetch the diff for this PR (limit to 8000 chars to stay in Gemini's context)
           DIFF=$(gh pr diff ${{ github.event.pull_request.number }} | head -c 8000)
-          # Save to file to avoid shell escaping issues
-          echo "$DIFF" > /tmp/pr_diff.txt
-          echo "Diff captured ($(wc -c < /tmp/pr_diff.txt) bytes)"
+
+          if [ -z "$DIFF" ]; then
+            echo "No file changes in this PR — skipping Gemini review."
+            echo "empty=true" >> $GITHUB_OUTPUT
+          else
+            echo "$DIFF" > /tmp/pr_diff.txt
+            echo "empty=false" >> $GITHUB_OUTPUT
+            echo "Diff captured ($(wc -c < /tmp/pr_diff.txt) bytes)"
+          fi
 
       - name: Review with Gemini
+        id: gemini
+        if: steps.diff.outputs.empty != 'true'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           DIFF=$(cat /tmp/pr_diff.txt)
 
-          # Build the request JSON using jq to safely escape the diff
           REQUEST=$(jq -n \
             --arg diff "$DIFF" \
             '{
               "contents": [{
                 "parts": [{
-                  "text": ("You are a senior Go/JavaScript code reviewer. Review this pull request diff and provide concise, actionable feedback.\n\nFocus on:\n- Bugs or logic errors\n- Security issues\n- Performance problems\n- Go best practices\n- Missing error handling\n\nBe constructive and specific. Keep response under 600 words.\n\nDiff:\n" + $diff)
+                  "text": ("You are a senior Go/JavaScript code reviewer. Review this PR diff.\n\nFocus on: bugs, security issues, performance, Go best practices, error handling.\n\nBe concise and specific. Max 500 words.\n\nDiff:\n" + $diff)
                 }]
               }],
-              "generationConfig": {
-                "temperature": 0.3,
-                "maxOutputTokens": 1024
-              }
+              "generationConfig": { "temperature": 0.3, "maxOutputTokens": 1024 }
             }')
 
-          # Call Gemini API
-          RESPONSE=$(curl -s \
+          # Capture HTTP status AND response body separately
+          HTTP_STATUS=$(curl -s -o /tmp/gemini_raw.json -w "%{http_code}" \
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$REQUEST")
 
-          # Extract the review text and write to file (avoids shell escaping issues)
-          echo "$RESPONSE" | jq -r \
-            '.candidates[0].content.parts[0].text // "⚠️ Gemini returned no review. Check the API key and quota."' \
-            > /tmp/gemini_review.txt
+          echo "=== HTTP Status: $HTTP_STATUS ==="
+          echo "=== Raw Response ==="
+          cat /tmp/gemini_raw.json
 
-          echo "=== Gemini Review Preview ==="
-          head -5 /tmp/gemini_review.txt
+          # Parse based on status
+          if [ "$HTTP_STATUS" = "200" ]; then
+            jq -r '.candidates[0].content.parts[0].text // "⚠️ Unexpected empty response from Gemini."' \
+              /tmp/gemini_raw.json > /tmp/gemini_review.txt
+            echo "review_ready=true" >> $GITHUB_OUTPUT
+          elif [ "$HTTP_STATUS" = "429" ]; then
+            echo "⚠️ Gemini rate limit hit (429). Free tier allows ~2 req/min. Try again in a minute." \
+              > /tmp/gemini_review.txt
+            echo "review_ready=true" >> $GITHUB_OUTPUT
+          elif [ "$HTTP_STATUS" = "400" ] || [ "$HTTP_STATUS" = "403" ]; then
+            echo "❌ Gemini API key is invalid or missing. Add GEMINI_API_KEY to repo secrets." \
+              > /tmp/gemini_review.txt
+            echo "review_ready=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ Gemini API error (HTTP $HTTP_STATUS). Check the workflow logs for details." \
+              > /tmp/gemini_review.txt
+            echo "review_ready=true" >> $GITHUB_OUTPUT
+          fi
+
+          echo "=== Review Output ==="
+          cat /tmp/gemini_review.txt
 
       - name: Post review comment
+        if: steps.gemini.outputs.review_ready == 'true'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            // Read from file to avoid template injection issues with special chars
             const review = fs.readFileSync('/tmp/gemini_review.txt', 'utf8').trim();
             const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
             const body = `## 🤖 Gemini AI Code Review\n\n${review}\n\n---\n*Reviewed by Gemini 2.0 Flash · [View run](${runUrl})*`;
