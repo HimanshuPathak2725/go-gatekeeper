@@ -1,53 +1,96 @@
-name: Release Binaries
+name: Release
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. v2.0.1)'
+        description: 'Release version tag (e.g. v2.0.1)'
         required: true
         default: 'v2.0.0'
+      release_notes:
+        description: 'Release notes / changelog (optional)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
+  actions: write     # needed to dispatch npm-publish workflow
 
 jobs:
-  build:
-    name: Build & Release
+  release:
+    name: Build & Publish Release
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-          
+          cache: true
+
+      # ── Build all platform binaries ──────────────────────────────────────
       - name: Build Binaries
         run: |
           mkdir -p dist
-          
-          # Windows
-          GOOS=windows GOARCH=amd64 go build -o dist/gatekeeper-windows-amd64.exe ./cmd/cli
-          
-          # Linux
-          GOOS=linux GOARCH=amd64 go build -o dist/gatekeeper-linux-amd64 ./cmd/cli
-          
-          # macOS (Intel)
-          GOOS=darwin GOARCH=amd64 go build -o dist/gatekeeper-darwin-amd64 ./cmd/cli
-          
-          # macOS (Apple Silicon)
-          GOOS=darwin GOARCH=arm64 go build -o dist/gatekeeper-darwin-arm64 ./cmd/cli
 
+          # Windows (amd64)
+          GOOS=windows GOARCH=amd64 go build \
+            -ldflags="-s -w" \
+            -o dist/gatekeeper-windows-amd64.exe \
+            ./cmd/cli
+
+          # Linux (amd64)
+          GOOS=linux GOARCH=amd64 go build \
+            -ldflags="-s -w" \
+            -o dist/gatekeeper-linux-amd64 \
+            ./cmd/cli
+
+          # macOS Intel (amd64)
+          GOOS=darwin GOARCH=amd64 go build \
+            -ldflags="-s -w" \
+            -o dist/gatekeeper-darwin-amd64 \
+            ./cmd/cli
+
+          # macOS Apple Silicon (arm64)
+          GOOS=darwin GOARCH=arm64 go build \
+            -ldflags="-s -w" \
+            -o dist/gatekeeper-darwin-arm64 \
+            ./cmd/cli
+
+          echo "=== Built binaries ==="
+          ls -lh dist/
+
+      # ── Create GitHub Release with all binaries ──────────────────────────
       - name: Create GitHub Release
+        id: create_release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.event.inputs.version }}
-          name: Release ${{ github.event.inputs.version }}
+          name: "Release ${{ github.event.inputs.version }}"
+          body: ${{ github.event.inputs.release_notes }}
           files: dist/*
+          generate_release_notes: ${{ github.event.inputs.release_notes == '' }}
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Trigger npm publish workflow ─────────────────────────────────────
+      - name: Trigger npm Publish
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              workflow_id: 'npm-publish.yml',
+              ref:   'main',
+              inputs: {
+                version: '${{ github.event.inputs.version }}'
+              }
+            });
+            console.log('✅ npm-publish.yml dispatched for ${{ github.event.inputs.version }}');

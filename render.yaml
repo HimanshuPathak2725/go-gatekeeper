@@ -2,8 +2,12 @@ services:
   - type: web
     name: gatekeeper-relay
     env: go
-    buildCommand: go build -o gatekeeper-server ./cmd/server
+    region: oregon
+    plan: free
+    buildCommand: go build -ldflags="-s -w" -o gatekeeper-server ./cmd/server
     startCommand: ./gatekeeper-server
+    healthCheckPath: /
+    autoDeploy: true
     envVars:
       - key: PORT
-        value: 8080
+        value: 10000

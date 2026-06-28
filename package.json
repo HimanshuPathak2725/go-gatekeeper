@@ -3,6 +3,9 @@
   "version": "2.0.0",
   "description": "The only terminal sharing tool safe enough to post on Twitter. Zero-trust pair programming.",
   "main": "npm/run.js",
+  "files": [
+    "npm/run.js"
+  ],
   "bin": {
     "gatekeeper-shell": "npm/run.js"
   },

@@ -1,0 +1,53 @@
+name: Publish to npm
+
+on:
+  # Triggered automatically by the release workflow
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish — must match GitHub Release tag (e.g. v2.0.1)'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: npm publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      # Strip the leading 'v' from the tag (v2.0.1 → 2.0.1) and bump package.json
+      - name: Set package version
+        run: |
+          RAW_VERSION="${{ github.event.inputs.version }}"
+          VERSION="${RAW_VERSION#v}"
+          echo "Publishing version: $VERSION"
+          npm version "$VERSION" --no-git-tag-version
+
+      # Validate package before publishing
+      - name: Dry-run check
+        run: npm pack --dry-run
+
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          # Add NPM_TOKEN to repo secrets → Settings → Secrets → Actions
+          # Generate it at: https://www.npmjs.com/settings/<username>/tokens
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "## ✅ Published to npm" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Package:** \`gatekeeper-shell@${{ github.event.inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Install:** \`npx gatekeeper-shell\`" >> $GITHUB_STEP_SUMMARY

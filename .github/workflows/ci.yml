@@ -1,0 +1,63 @@
+name: Contributor CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write   # needed to post review comments
+
+jobs:
+  # ── Build & Quality Checks ─────────────────────────────────────────────────
+  build:
+    name: Build & Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Build CLI
+        run: go build -v ./cmd/cli
+
+      - name: Build Server
+        run: go build -v ./cmd/server
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+  # ── AI Code Review — Gemini (free, no credit card) ─────────────────────────
+  #
+  #  Get your free API key:
+  #    1. Go to https://aistudio.google.com/app/apikey
+  #    2. Click "Create API key" (free, no card needed)
+  #    3. Add it as a repo secret named GEMINI_API_KEY:
+  #       GitHub → repo Settings → Secrets → Actions → New repository secret
+  #
+  ai-review:
+    name: Gemini AI Review
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Gemini Code Review
+        uses: google-gemini/gemini-code-review-action@main
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          github_token:   ${{ secrets.GITHUB_TOKEN }}
+          # Model — gemini-2.0-flash is free tier and very capable
+          model:          gemini-2.0-flash
+          # Post review as inline PR comments
+          pull_request_id: ${{ github.event.pull_request.number }}
