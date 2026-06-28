@@ -90,9 +90,11 @@ jobs:
             }')
 
           # Capture HTTP status AND response body separately
+          # NOTE: New AQ. format keys require X-goog-api-key HEADER (not ?key= URL param)
           HTTP_STATUS=$(curl -s -o /tmp/gemini_raw.json -w "%{http_code}" \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent" \
             -H "Content-Type: application/json" \
+            -H "X-goog-api-key: $GEMINI_API_KEY" \
             -d "$REQUEST")
 
           echo "=== HTTP Status: $HTTP_STATUS ==="
