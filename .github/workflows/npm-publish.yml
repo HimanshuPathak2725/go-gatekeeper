@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write   # required for npm provenance (bypasses OTP/2FA)
 
 jobs:
   publish:
@@ -23,7 +24,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
       # Strip the leading 'v' from the tag (v2.0.1 → 2.0.1) and bump package.json
@@ -39,10 +40,10 @@ jobs:
         run: npm pack --dry-run
 
       - name: Publish to npm
-        run: npm publish --access public
+        # --provenance: attaches a signed OIDC attestation proving this package
+        # came from this GitHub Actions run — bypasses 2FA/OTP requirement
+        run: npm publish --access public --provenance
         env:
-          # Add NPM_TOKEN to repo secrets → Settings → Secrets → Actions
-          # Generate it at: https://www.npmjs.com/settings/<username>/tokens
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Summary
@@ -51,3 +52,4 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Package:** \`gatekeeper-shell@${{ github.event.inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Install:** \`npx gatekeeper-shell\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Provenance:** This release is signed and verifiable on npm" >> $GITHUB_STEP_SUMMARY
