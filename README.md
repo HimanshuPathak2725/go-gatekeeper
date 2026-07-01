@@ -2,6 +2,8 @@
 
 > A **secure, collaborative, remote terminal wrapper** for your POSIX-style shell. Share your terminal with guests — but you decide what runs.
 
+🌐 **Website:** [gatekeeper.vishalraut.me](http://gatekeeper.vishalraut.me/)
+
 [![Contributor CI](https://github.com/VishalRaut2106/go-gatekeeper/actions/workflows/ci.yml/badge.svg)](https://github.com/VishalRaut2106/go-gatekeeper/actions/workflows/ci.yml)
 [![NPM Version](https://img.shields.io/npm/v/gatekeeper-shell?style=flat-square&logo=npm)](https://www.npmjs.com/package/gatekeeper-shell)
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go)](https://go.dev/dl/)
