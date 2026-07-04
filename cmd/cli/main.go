@@ -282,7 +282,7 @@ const cmdDoneMarker = "---GATEKEEPER_CMD_DONE---"
 
 func startShell() {
 	if isWin {
-		shellCmd = exec.Command("powershell.exe", "-NoProfile")
+		shellCmd = exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "-")
 	} else {
 		shellCmd = exec.Command("/bin/bash")
 	}
@@ -300,7 +300,7 @@ func startShell() {
 		scanner := bufio.NewScanner(shellOut)
 		for scanner.Scan() {
 			text := scanner.Text()
-			if strings.TrimSpace(text) == cmdDoneMarker {
+			if strings.Contains(text, cmdDoneMarker) {
 				mu.Lock()
 				shellBusy = false
 				go processNext()
@@ -361,10 +361,14 @@ func runCommand(line string) {
 		if len(parts) > 1 {
 			target = strings.Join(parts[1:], " ")
 		}
+		target = strings.Trim(target, "\"'")
 		if target == "~" {
 			target, _ = os.UserHomeDir()
 		}
 		os.Chdir(target)
+		if isWin {
+			line = fmt.Sprintf("Set-Location '%s'", target)
+		}
 	case "pwd":
 		dir, _ := os.Getwd()
 		fmt.Println(dir)

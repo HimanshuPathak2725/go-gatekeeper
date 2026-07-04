@@ -70,10 +70,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   tTitle.textContent  = `gatekeeper \u2014 guest`;
 
   const term = new Terminal({
-    fontFamily: '"JetBrains Mono", monospace',
-    fontSize: 14,
-    theme: { background: '#0D0D0D', foreground: '#E0E0E0', cursor: '#E0E0E0' },
-    cursorBlink: true
+    fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+    fontSize: 14.5,
+    letterSpacing: 0.5,
+    lineHeight: 1.6,
+    theme: { 
+      background: '#00000000', 
+      foreground: '#e6e6e6', 
+      cursor: '#4fc1ff',
+      selectionBackground: 'rgba(79, 193, 255, 0.3)'
+    },
+    cursorBlink: true,
+    cursorStyle: 'bar',
+    cursorWidth: 2
   });
   const fitAddon = new FitAddon.FitAddon();
   term.loadAddon(fitAddon);
@@ -128,21 +137,85 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   let inputBuffer = '';
+  let cursorOffset = 0;
+  let history = [];
+  let historyIdx = -1;
+  let tempBuffer = '';
+
   term.onData(async (data) => {
     if (ws.readyState !== WebSocket.OPEN) return;
+
+    if (data.startsWith('\x1b[')) {
+      if (data === '\x1b[A') { // Up Arrow
+        if (history.length > 0 && historyIdx < history.length - 1) {
+          if (historyIdx === -1) tempBuffer = inputBuffer;
+          term.write('\b'.repeat(inputBuffer.length - cursorOffset) + ' '.repeat(inputBuffer.length) + '\b'.repeat(inputBuffer.length));
+          historyIdx++;
+          inputBuffer = history[historyIdx];
+          cursorOffset = 0;
+          term.write(inputBuffer);
+        }
+      } else if (data === '\x1b[B') { // Down Arrow
+        if (historyIdx > 0) {
+          term.write('\b'.repeat(inputBuffer.length - cursorOffset) + ' '.repeat(inputBuffer.length) + '\b'.repeat(inputBuffer.length));
+          historyIdx--;
+          inputBuffer = history[historyIdx];
+          cursorOffset = 0;
+          term.write(inputBuffer);
+        } else if (historyIdx === 0) {
+          term.write('\b'.repeat(inputBuffer.length - cursorOffset) + ' '.repeat(inputBuffer.length) + '\b'.repeat(inputBuffer.length));
+          historyIdx = -1;
+          inputBuffer = tempBuffer;
+          cursorOffset = 0;
+          term.write(inputBuffer);
+        }
+      } else if (data === '\x1b[C') { // Right Arrow
+        if (cursorOffset > 0) {
+          cursorOffset--;
+          term.write(data);
+        }
+      } else if (data === '\x1b[D') { // Left Arrow
+        if (cursorOffset < inputBuffer.length) {
+          cursorOffset++;
+          term.write(data);
+        }
+      }
+      return;
+    }
+
     for (let i = 0; i < data.length; i++) {
       const char = data[i];
       if (char === '\r') {
         term.write('\r\n');
         if (inputBuffer.trim()) {
+            if (history[0] !== inputBuffer) history.unshift(inputBuffer);
             const encryptedCmd = await encryptStr(inputBuffer);
             ws.send(JSON.stringify({ type: 'submit_command', command: encryptedCmd }));
         }
         inputBuffer = '';
-      } else if (char === '\x7F') {
-        if (inputBuffer.length > 0) { inputBuffer = inputBuffer.slice(0, -1); term.write('\b \b'); }
-      } else {
-        inputBuffer += char; term.write(char);
+        tempBuffer = '';
+        cursorOffset = 0;
+        historyIdx = -1;
+      } else if (char === '\x7F') { // Backspace
+        if (inputBuffer.length > cursorOffset) {
+          const splitIdx = inputBuffer.length - cursorOffset;
+          inputBuffer = inputBuffer.slice(0, splitIdx - 1) + inputBuffer.slice(splitIdx);
+          
+          term.write('\b \b');
+          if (cursorOffset > 0) {
+            const rest = inputBuffer.slice(splitIdx - 1);
+            term.write(rest + ' \b' + '\b'.repeat(rest.length));
+          }
+        }
+      } else { // Normal printable char
+        const splitIdx = inputBuffer.length - cursorOffset;
+        inputBuffer = inputBuffer.slice(0, splitIdx) + char + inputBuffer.slice(splitIdx);
+        
+        term.write(char);
+        if (cursorOffset > 0) {
+          const rest = inputBuffer.slice(splitIdx + 1);
+          term.write(rest + '\b'.repeat(rest.length));
+        }
       }
     }
   });
