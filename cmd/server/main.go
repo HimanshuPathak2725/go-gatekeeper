@@ -308,7 +308,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 		"uptime":      time.Since(serverStart).String(),
 		"activeRooms": activeRooms,
 		"totalConns":  total,
-		"version":     "2.0.4",
+		"version":     "2.1.0",
 	})
 }
 
