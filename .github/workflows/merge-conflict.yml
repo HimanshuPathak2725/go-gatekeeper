@@ -1,0 +1,26 @@
+name: "Merge Conflict Monitor"
+
+on:
+  # Run when a PR is merged into master (to check if it broke other open PRs)
+  push:
+    branches:
+      - master
+  # Run when an author updates their PR branch (to check if they resolved it)
+  pull_request_target:
+    types: [synchronize]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  check_conflicts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for merge conflicts
+        uses: eps1lon/actions-label-merge-conflict@v3
+        with:
+          dirtyLabel: "has conflicts"
+          repoToken: "${{ secrets.GITHUB_TOKEN }}"
+          commentOnDirty: "Hey @${author}, this PR has developed a merge conflict with `master`. Could you please pull the latest `master` and resolve the conflict so we can get this merged? Thanks! 🚀"
+          commentOnClean: "Merge conflicts have been successfully resolved. Thanks! ✅"
