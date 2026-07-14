@@ -52,7 +52,7 @@ var (
 	shellOut io.ReadCloser
 	shellErr io.ReadCloser
 
-	e2eKey []byte
+	e2eKey       []byte
 	auditLogFile *os.File
 )
 
@@ -362,10 +362,20 @@ func runCommand(line string) {
 			target = strings.Join(parts[1:], " ")
 		}
 		target = strings.Trim(target, "\"'")
-		if target == "~" {
-			target, _ = os.UserHomeDir()
+
+		if target == "~" || strings.HasPrefix(target, "~/") {
+			if home, err := os.UserHomeDir(); err == nil {
+				if target == "~" {
+					target = home
+				} else {
+					rel := strings.TrimLeft(strings.TrimPrefix(target, "~/"), "/\\")
+					target = filepath.Join(home, rel)
+				}
+			}
 		}
+
 		_ = os.Chdir(target)
+
 		if isWin {
 			line = fmt.Sprintf("Set-Location '%s'", target)
 		}
@@ -441,7 +451,7 @@ func initLogger(roomCode string) {
 	logDir := filepath.Join(home, ".gatekeeper", "logs")
 	_ = os.MkdirAll(logDir, 0700)
 	logPath := filepath.Join(logDir, fmt.Sprintf("session_%s.log", roomCode))
-	
+
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err == nil {
 		auditLogFile = f
