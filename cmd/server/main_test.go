@@ -128,7 +128,7 @@ func TestIsAllowedOrigin(t *testing.T) {
 	}{
 		{"empty origin (non-browser client)", "", true},
 		{"render.com exact", "https://gatekeeper-relay.onrender.com", true},
-		{"onrender.com subdomain", "https://gatekeeper-relay.onrender.com", true},
+		{"onrender.com subdomain", "https://staging.gatekeeper-relay.onrender.com", true},
 		{"railway.app", "https://myapp.railway.app", true},
 		{"localhost", "http://localhost:3000", true},
 		{"127.0.0.1", "http://127.0.0.1:3000", true},
