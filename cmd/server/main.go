@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,10 +19,36 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// isAllowedOrigin mirrors the domain patterns already trusted in
+// guestURL() (onrender.com, railway.app, ngrok, fly.dev), plus localhost
+// for local dev. Non-browser clients (CLI, curl) don't send an Origin
+// header at all, so those are allowed through unconditionally.
+func isAllowedOrigin(origin string) bool {
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	if host == "localhost" || host == "127.0.0.1" {
+		return true
+	}
+	for _, domain := range []string{"onrender.com", "railway.app", "ngrok", "fly.dev"} {
+		if host == domain || strings.HasSuffix(host, "."+domain) {
+			return true
+		}
+	}
+	return false
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  8192,
 	WriteBufferSize: 8192,
-	CheckOrigin:     func(r *http.Request) bool { return true },
+	CheckOrigin: func(r *http.Request) bool {
+		return isAllowedOrigin(r.Header.Get("Origin"))
+	},
 }
 
 type Message struct {
@@ -87,8 +114,6 @@ func generateCode() string {
 	_, _ = rand.Read(b)
 	return strings.ToUpper(hex.EncodeToString(b))
 }
-
-
 
 func guestURL(code string, reqHost string) string {
 	scheme := "http"

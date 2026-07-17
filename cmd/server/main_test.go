@@ -119,3 +119,31 @@ func TestRateLimitRejectsExcessRequests(t *testing.T) {
 		t.Fatalf("expected at least one 429 after 11 rapid requests from the same IP, got none")
 	}
 }
+
+func TestIsAllowedOrigin(t *testing.T) {
+	cases := []struct {
+		name   string
+		origin string
+		want   bool
+	}{
+		{"empty origin (non-browser client)", "", true},
+		{"render.com exact", "https://gatekeeper-relay.onrender.com", true},
+		{"onrender.com subdomain", "https://gatekeeper-relay.onrender.com", true},
+		{"railway.app", "https://myapp.railway.app", true},
+		{"localhost", "http://localhost:3000", true},
+		{"127.0.0.1", "http://127.0.0.1:3000", true},
+		{"spoofed lookalike domain", "https://evilrender.com", false},
+		{"spoofed suffix domain", "https://sub.render.com.attacker.net", false},
+		{"unrelated domain", "https://attacker.com", false},
+		{"malformed origin", "not a url", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isAllowedOrigin(tc.origin)
+			if got != tc.want {
+				t.Errorf("isAllowedOrigin(%q) = %v, want %v", tc.origin, got, tc.want)
+			}
+		})
+	}
+}
