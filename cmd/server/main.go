@@ -29,9 +29,10 @@ func isAllowedOrigin(origin string) bool {
 	}
 	u, err := url.Parse(origin)
 	if err != nil {
+		log.Printf("isAllowedOrigin: failed to parse Origin %q: %v", origin, err)
 		return false
 	}
-	host := u.Hostname()
+	host := strings.ToLower(u.Hostname())
 	if host == "localhost" || host == "127.0.0.1" {
 		return true
 	}
