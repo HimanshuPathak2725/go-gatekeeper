@@ -79,26 +79,32 @@ func encrypt(text string) string {
 	return base64.RawURLEncoding.EncodeToString(ciphertext)
 }
 
-func decrypt(cryptoText string) string {
+func decrypt(cryptoText string) (string, error) {
 	if cryptoText == "" {
-		return ""
+		return "", nil
 	}
 	ciphertext, err := base64.RawURLEncoding.DecodeString(cryptoText)
 	if err != nil {
-		return cryptoText
+		return "", fmt.Errorf("invalid base64: %w", err)
 	}
-	block, _ := aes.NewCipher(e2eKey)
-	gcm, _ := cipher.NewGCM(block)
+	block, err := aes.NewCipher(e2eKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to create cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", fmt.Errorf("failed to create GCM: %w", err)
+	}
 	nonceSize := gcm.NonceSize()
 	if len(ciphertext) < nonceSize {
-		return cryptoText
+		return "", fmt.Errorf("ciphertext too short")
 	}
 	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
 	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return cryptoText
+		return "", fmt.Errorf("decryption failed: %w", err)
 	}
-	return string(plaintext)
+	return string(plaintext), nil
 }
 
 func main() {
@@ -159,7 +165,13 @@ func main() {
 				fmt.Printf("🔗 Give this link to your guest:\n   %s\n\n", secureGuestURL)
 
 			case "submit_command":
-				decryptedCmd := decrypt(msg.Command)
+				decryptedCmd, err := decrypt(msg.Command)
+				if err != nil {
+					fmt.Printf("\n\x1b[31;1m🚨 SECURITY WARNING: Received unencrypted or tampered command from guest: %v. Rejecting command.\x1b[0m\n", err)
+					logAudit("REJECTED_UNENCRYPTED_OR_TAMPERED_COMMAND", "SECURITY")
+					printHostPrompt(false)
+					continue
+				}
 				enqueue(decryptedCmd)
 			}
 		}
