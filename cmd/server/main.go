@@ -48,7 +48,13 @@ func isAllowedOrigin(origin string) bool {
 	if host == "localhost" || host == "127.0.0.1" {
 		return true
 	}
-	for _, domain := range []string{"onrender.com", "railway.app", "ngrok", "fly.dev"} {
+	for _, domain := range []string{
+		"onrender.com",
+		"railway.app",
+		"ngrok",
+		"fly.dev",
+		"vishalraut.me",
+	} {
 		if host == domain || strings.HasSuffix(host, "."+domain) {
 			return true
 		}

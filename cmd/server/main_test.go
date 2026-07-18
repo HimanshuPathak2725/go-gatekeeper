@@ -132,6 +132,8 @@ func TestIsAllowedOrigin(t *testing.T) {
 		{"railway.app", "https://myapp.railway.app", true},
 		{"localhost", "http://localhost:3000", true},
 		{"127.0.0.1", "http://127.0.0.1:3000", true},
+		{"vishalraut.me subdomain", "https://gatekeeper.vishalraut.me", true},
+		{"vishalraut.me exact", "https://vishalraut.me", true},
 		{"spoofed lookalike domain", "https://evilrender.com", false},
 		{"spoofed suffix domain", "https://sub.render.com.attacker.net", false},
 		{"unrelated domain", "https://attacker.com", false},
