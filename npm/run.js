@@ -128,6 +128,7 @@ async function downloadBinary() {
   }
 
   console.log('Checksum verified.');
+  // Windows doesn't use POSIX executable permission bits
   if (platform !== 'win32') {
     fs.chmodSync(binPath, 0o755);
   }
