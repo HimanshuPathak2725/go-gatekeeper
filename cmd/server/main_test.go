@@ -204,7 +204,7 @@ func TestReadPumpEnforcesMessageSizeLimit(t *testing.T) {
 		t.Fatalf("write oversized message: %v", err)
 	}
 
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, _, err = conn.ReadMessage()
 	if err == nil {
 		t.Fatalf("expected connection to be closed after oversized message, but read succeeded")
