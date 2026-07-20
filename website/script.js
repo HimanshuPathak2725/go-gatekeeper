@@ -277,10 +277,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const updateToggleUI = () => {
         if (themeToggle) {
+            const isDark = body.classList.contains('dark-theme');
             const span = themeToggle.querySelector('span');
             if (span) {
-                span.textContent = body.classList.contains('dark-theme') ? 'DARK' : 'LIGHT';
+                span.textContent = isDark ? 'DARK' : 'LIGHT';
             }
+            themeToggle.setAttribute('aria-pressed', String(!isDark));
+            themeToggle.setAttribute('aria-label', isDark ? 'Switch to light theme' : 'Switch to dark theme');
         }
     };
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -10,9 +11,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -118,10 +121,11 @@ func init() {
 		d := filepath.Dir(p)
 		if _, err2 := os.Stat(filepath.Join(d, "web")); err2 == nil {
 			baseDir = d
-			return
 		}
 	}
-	baseDir = "."
+	if baseDir == "" {
+		baseDir = "."
+	}
 
 	if p := os.Getenv("PORT"); p != "" {
 		port = p
@@ -129,7 +133,12 @@ func init() {
 }
 
 func generateCode() string {
-	b := make([]byte, 3)
+	// 5 random bytes -> 10 hex chars, ~1.1 trillion possible codes
+	// (up from 3 bytes / 6 chars / ~16.7M), as defense-in-depth now
+	// that /stats no longer hands codes out directly.
+	b := make([]byte, 5)
+	// crypto/rand.Read only errors if the system CSPRNG is unavailable,
+	// which is effectively unrecoverable — ignoring is standard practice here.
 	_, _ = rand.Read(b)
 	return strings.ToUpper(hex.EncodeToString(b))
 }
@@ -266,7 +275,11 @@ func (c *Client) readPump() {
 		if err := c.conn.ReadJSON(&msg); err != nil {
 			break
 		}
-		c.room.broadcast <- msg
+		select {
+		case c.room.broadcast <- msg:
+		case <-c.room.done:
+			return
+		}
 	}
 }
 
@@ -374,10 +387,15 @@ func handleWebSocket(w http.ResponseWriter, req *http.Request) {
 		}
 
 		client := &Client{room: r, conn: conn, send: make(chan Message, 256), role: "guest"}
-		r.register <- client
-
-		go client.writePump()
-		go client.readPump()
+		select {
+		case r.register <- client:
+			go client.writePump()
+			go client.readPump()
+		case <-r.done:
+			_ = conn.WriteJSON(Message{Type: "stderr", Data: "Host disconnected — session ended."})
+			_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(4002, "room closed"))
+			conn.Close()
+		}
 	}
 }
 
@@ -403,16 +421,17 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func handleStats(w http.ResponseWriter, r *http.Request) {
 	roomsMu.RLock()
+	// Intentionally does NOT expose room.Code here — /stats is
+	// unauthenticated, and leaking codes would let anyone join any
+	// active session as a guest without brute-forcing anything.
 	type roomInfo struct {
-		Code       string `json:"code"`
-		Guests     int    `json:"guests"`
-		GuestCount int    `json:"totalGuests"`
+		Guests     int `json:"guests"`
+		GuestCount int `json:"totalGuests"`
 	}
 	var infos []roomInfo
 	for _, room := range rooms {
 		room.mu.Lock()
 		infos = append(infos, roomInfo{
-			Code:       room.Code,
 			Guests:     len(room.Guests),
 			GuestCount: room.GuestCount,
 		})
@@ -425,6 +444,39 @@ func handleStats(w http.ResponseWriter, r *http.Request) {
 		"rooms":  infos,
 		"uptime": time.Since(serverStart).String(),
 	})
+}
+
+// shutdownServer notifies every connected client (host + guests) across
+// all active rooms that the server is restarting, then tears each room
+// down via the existing destroy() path (reusing the done/closeOnce
+// machinery from #7/#8) so no goroutines leak during shutdown.
+func shutdownServer() {
+	roomsMu.RLock()
+	active := make([]*Room, 0, len(rooms))
+	for _, r := range rooms {
+		active = append(active, r)
+	}
+	roomsMu.RUnlock()
+
+	notice := Message{Type: "stderr", Data: "\nServer is restarting, please reconnect shortly.\n"}
+	for _, r := range active {
+		r.mu.Lock()
+		if r.Host != nil {
+			select {
+			case r.Host.send <- notice:
+			default:
+			}
+		}
+		for guest := range r.Guests {
+			select {
+			case guest.send <- notice:
+			default:
+			}
+		}
+		r.mu.Unlock()
+		r.destroy()
+	}
+	log.Printf("shutdown: drained %d active room(s)", len(active))
 }
 
 func main() {
@@ -451,7 +503,25 @@ func main() {
 	fmt.Printf("║  Listening on port: %-40s ║\n", port)
 	fmt.Println("╚══════════════════════════════════════════════════════════════╝")
 
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatalf("Server: %v", err)
+	srv := &http.Server{Addr: ":" + port}
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server: %v", err)
+		}
+	}()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+	<-sigCh
+
+	log.Println("shutdown signal received, draining active rooms...")
+	shutdownServer()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("graceful shutdown error: %v", err)
 	}
+	log.Println("server exited cleanly")
 }
